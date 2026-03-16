@@ -13,7 +13,7 @@ defineProps<{
     
     <div class="py-4">
       <p class="text-lg font-semibold text-gray-900">{{ winner.nickname }}</p>
-      <p class="text-sm text-gray-600 mb-2">{{ winner.phone_masked }}</p>
+      <p class="text-sm text-gray-600 mb-2">{{ winner.phoneMasked }}</p>
       <div class="bg-white/60 rounded p-4 inline-block mt-2">
         <p class="text-gray-800 italic">"{{ winner.content }}"</p>
       </div>

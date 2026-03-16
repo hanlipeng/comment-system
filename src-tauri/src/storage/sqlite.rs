@@ -125,6 +125,28 @@ impl CommentStorage for SqliteCommentStore {
         Ok(result)
     }
 
+    async fn list_recent_comments(&self, event_id: &str, limit: i64) -> Result<Vec<CommentEntity>> {
+        let result = sqlx::query_as::<_, CommentEntity>(
+            "SELECT id, event_id, nickname, content, phone, is_winner, created_at, updated_at FROM comments WHERE event_id = ? ORDER BY created_at DESC LIMIT ?",
+        )
+        .bind(event_id)
+        .bind(limit)
+        .fetch_all(&self.connection.pool)
+        .await?;
+        Ok(result)
+    }
+
+    async fn find_comment_by_event_and_phone(&self, event_id: &str, phone: &str) -> Result<Option<CommentEntity>> {
+        let result = sqlx::query_as::<_, CommentEntity>(
+            "SELECT id, event_id, nickname, content, phone, is_winner, created_at, updated_at FROM comments WHERE event_id = ? AND phone = ?",
+        )
+        .bind(event_id)
+        .bind(phone)
+        .fetch_optional(&self.connection.pool)
+        .await?;
+        Ok(result)
+    }
+
     async fn update_comment(&self, entity: CommentEntity) -> Result<()> {
         sqlx::query(
             "UPDATE comments SET nickname = ?, content = ?, phone = ?, is_winner = ?, updated_at = ? WHERE id = ?",

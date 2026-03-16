@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { api } from '../api/client';
 
 const props = defineProps<{
   eventId: string;
+}>();
+
+const emit = defineEmits<{
+  (e: 'success'): void;
 }>();
 
 const nickname = ref('');
@@ -11,9 +15,27 @@ const content = ref('');
 const phone = ref('');
 const isSubmitting = ref(false);
 const errorMsg = ref('');
-const success = ref(false);
+const hasSubmitted = ref(false);
+
+const STORAGE_KEY = `comment_system_event_${props.eventId}_submitted`;
+
+const checkStatus = () => {
+  if (localStorage.getItem(STORAGE_KEY) === 'true') {
+    hasSubmitted.value = true;
+  }
+};
+
+const setStatus = () => {
+  localStorage.setItem(STORAGE_KEY, 'true');
+  hasSubmitted.value = true;
+};
+
+onMounted(() => {
+  checkStatus();
+});
 
 const handleSubmit = async () => {
+  if (hasSubmitted.value) return;
   if (!nickname.value || !content.value || !phone.value) return;
   
   errorMsg.value = '';
@@ -24,7 +46,6 @@ const handleSubmit = async () => {
     return;
   }
 
-  success.value = false;
   isSubmitting.value = true;
 
   try {
@@ -33,16 +54,14 @@ const handleSubmit = async () => {
       content: content.value,
       phone: phone.value
     });
-    success.value = true;
-    nickname.value = '';
-    content.value = '';
-    phone.value = '';
     
-    // 3秒后隐藏成功提示
-    setTimeout(() => { success.value = false; }, 4000);
+    setStatus(); // Mark as submitted
+    
+    // Emit success for parent to handle redirection
+    emit('success');
+    
   } catch (e: any) {
     errorMsg.value = e.message || '提交失败，请检查网络';
-  } finally {
     isSubmitting.value = false;
   }
 };
@@ -54,8 +73,17 @@ const handleSubmit = async () => {
       <div class="w-1.5 h-6 bg-indigo-600 rounded-full"></div>
       <h2 class="text-xl font-bold text-gray-900">参与互动</h2>
     </div>
+
+    <div v-if="hasSubmitted" class="text-center p-6 bg-gray-50 rounded-xl border border-gray-100">
+       <span class="text-3xl mb-2 block">🎉</span>
+       <h3 class="text-lg font-bold text-gray-800">您已参与过本次活动</h3>
+       <p class="text-sm text-gray-500 mt-2 mb-4">请耐心等待开奖结果，祝您好运！</p>
+       <router-link :to="`/events/${eventId}/result`" class="inline-block bg-indigo-600 text-white px-6 py-2 rounded-full text-sm font-semibold hover:bg-indigo-700 transition shadow-md">
+          查看实时结果
+       </router-link>
+    </div>
     
-    <form @submit.prevent="handleSubmit" class="space-y-5">
+    <form v-else @submit.prevent="handleSubmit" class="space-y-5">
       <div class="group">
         <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 px-1">您的昵称</label>
         <input 
@@ -90,13 +118,6 @@ const handleSubmit = async () => {
         ></textarea>
         <div class="text-right text-[10px] text-gray-400 mt-1">{{ content.length }}/200</div>
       </div>
-
-      <transition name="fade">
-        <div v-if="success" class="flex items-center space-x-2 text-green-600 bg-green-50 p-3 rounded-lg text-sm border border-green-100">
-          <span class="text-lg">✅</span>
-          <span>提交成功！好运正在赶来的路上...</span>
-        </div>
-      </transition>
 
       <transition name="fade">
         <div v-if="errorMsg" class="flex items-center space-x-2 text-red-600 bg-red-50 p-3 rounded-lg text-sm border border-red-100">

@@ -4,114 +4,127 @@ import { invoke } from "@tauri-apps/api/core";
 export interface Event {
   id: string;
   title: string;
-  status: "active" | "ended";
+  status: "active" | "closed" | "deleted";
+  createdAt: number; // Unix Timestamp (Milliseconds)
+  updatedAt: number; // Unix Timestamp (Milliseconds)
   winner?: Comment | null;
 }
 
 export interface Comment {
   id: string;
-  event_id: string;
+  eventId: string;
   nickname: string;
   content: string;
-  phone: string;
-  created_at: number;
+  phoneMasked: string;
+  isWinner: boolean;
+  createdAt: number; // Unix Timestamp (Milliseconds)
+  updatedAt: number; // Unix Timestamp (Milliseconds)
 }
 
-// --- 模拟数据 ---
-let mockServerRunning = false;
-let mockEvents: Event[] = [
-  { id: "1", title: "公司年会抽奖", status: "active" },
-  { 
-    id: "2", 
-    title: "上季度优秀员工评选", 
-    status: "ended",
-    winner: { 
-      id: "205", 
-      event_id: "2", 
-      nickname: "王五", 
-      content: "感谢大家的认可，我会继续努力！", 
-      phone: "136****8888", 
-      created_at: Date.now() - 86400000 
-    }
-  }
-];
-let mockComments: Record<string, Comment[]> = {
-  "1": [
-    { id: "101", event_id: "1", nickname: "张三", content: "中大奖！", phone: "138****1111", created_at: Date.now() },
-    { id: "102", event_id: "1", nickname: "李四", content: "祝大家新年快乐", phone: "139****2222", created_at: Date.now() }
-  ],
-  "2": [
-     { id: "201", event_id: "2", nickname: "赵六", content: "我也想中奖", phone: "137****3333", created_at: Date.now() - 90000000 },
-     { id: "205", event_id: "2", nickname: "王五", content: "感谢大家的认可，我会继续努力！", phone: "136****8888", created_at: Date.now() - 86400000 }
-  ]
-};
+export interface Settings {
+  server_port: number;
+  db_path: string;
+  wifi_ssid?: string | null;
+  wifi_password?: string | null;
+  wifi_encryption?: string | null;
+}
+
+export interface ReloadSettingsChanged {
+  server_port: boolean;
+  db_path: boolean;
+  wifi: boolean;
+}
+
+export interface ReloadSettingsResponse {
+  settings: Settings;
+  changed: ReloadSettingsChanged;
+}
 
 // --- API 实现 ---
-const USE_MOCK = true; // 当后端 Rust 命令准备好后，将其改为 false
+const USE_MOCK = false;
+
+// Mock Data
+const mockEvents: Event[] = [];
+const mockComments: Record<string, Comment[]> = {};
 
 export const adminApi = {
-  async startServer(port: number): Promise<void> {
-    if (USE_MOCK) {
-      console.log(`[Mock] 正在端口 ${port} 启动服务器...`);
-      mockServerRunning = true;
-      return Promise.resolve();
-    }
-    return invoke("start_server", { port });
+  // --- 服务器控制 ---
+  async startServer(): Promise<void> {
+    if (USE_MOCK) return Promise.resolve();
+    return invoke("start_server");
   },
 
   async stopServer(): Promise<void> {
-    if (USE_MOCK) {
-      console.log("[Mock] 正在停止服务器...");
-      mockServerRunning = false;
-      return Promise.resolve();
-    }
+    if (USE_MOCK) return Promise.resolve();
     return invoke("stop_server");
   },
 
   async isServerRunning(): Promise<boolean> {
-     if (USE_MOCK) return Promise.resolve(mockServerRunning);
-     // 假设后端有一个状态查询，或者前端自己维护
-     return Promise.resolve(mockServerRunning);
+     if (USE_MOCK) return Promise.resolve(false);
+     return invoke("is_server_running");
+  },
+
+  async getNetworkIp(): Promise<string> {
+    if (USE_MOCK) return Promise.resolve("127.0.0.1");
+    return invoke("get_network_ip");
+  },
+
+  async reloadSettings(): Promise<ReloadSettingsResponse> {
+    if (USE_MOCK) {
+      return Promise.resolve({
+        settings: { server_port: 3000, db_path: "./db/data.db" },
+        changed: { server_port: false, db_path: false, wifi: false }
+      });
+    }
+    return invoke("reload_settings");
+  },
+
+  // --- 活动管理 ---
+  async updateEventStatus(eventId: string, status: "active" | "closed"): Promise<void> {
+    if (USE_MOCK) return Promise.resolve();
+    return invoke("admin_update_event_status", { eventId, status });
+  },
+
+  async deleteEvent(eventId: string): Promise<void> {
+    if (USE_MOCK) return Promise.resolve();
+    return invoke("admin_delete_event", { eventId });
   },
 
   async createEvent(title: string): Promise<string> {
     if (USE_MOCK) {
       const newId = (mockEvents.length + 1).toString();
-      const newEvent: Event = { id: newId, title, status: "active" };
-      mockEvents.push(newEvent);
+      const now = Date.now();
+      mockEvents.push({ 
+          id: newId, 
+          title, 
+          status: "active",
+          createdAt: now,
+          updatedAt: now
+      });
       mockComments[newId] = [];
       return Promise.resolve(newId);
     }
-    return invoke("create_event", { title });
+    // 注意后端命令名映射
+    const ev: Event = await invoke("admin_create_event", { title });
+    return ev.id;
   },
 
   async listEvents(): Promise<Event[]> {
-    if (USE_MOCK) {
-      return Promise.resolve([...mockEvents]);
-    }
-    return invoke("list_events");
+    if (USE_MOCK) return Promise.resolve([...mockEvents]);
+    return invoke("admin_list_events");
   },
 
   async getComments(eventId: string): Promise<Comment[]> {
-    if (USE_MOCK) {
-      return Promise.resolve(mockComments[eventId] || []);
-    }
-    return invoke("get_comments", { event_id: eventId });
+    if (USE_MOCK) return Promise.resolve(mockComments[eventId] || []);
+    return invoke("admin_get_comments", { eventId });
   },
 
   async drawWinner(eventId: string): Promise<Comment | null> {
     if (USE_MOCK) {
       const comments = mockComments[eventId] || [];
       if (comments.length === 0) return Promise.resolve(null);
-      const winner = comments[Math.floor(Math.random() * comments.length)];
-      
-      const event = mockEvents.find(e => e.id === eventId);
-      if (event) {
-          event.winner = winner;
-          event.status = "ended";
-      }
-      return Promise.resolve(winner);
+      return Promise.resolve(comments[0]);
     }
-    return invoke("draw_winner", { event_id: eventId });
+    return invoke("admin_draw_winner", { eventId });
   }
 };

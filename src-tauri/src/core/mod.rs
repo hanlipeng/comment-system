@@ -22,6 +22,9 @@ pub trait EventServicePort: Send + Sync {
     /// 添加留言
     async fn add_comment(&self, event_id: Uuid, nickname: String, content: String, phone: String) -> Result<Comment>;
 
+    /// 获取最新留言
+    async fn get_recent_comments(&self, event_id: Uuid, limit: usize) -> Result<Vec<Comment>>;
+
     /// 随机抽奖
     async fn draw_winner(&self, event_id: Uuid) -> Result<Comment>;
 
@@ -43,4 +46,9 @@ pub trait EventServicePort: Send + Sync {
     /// 
     /// 用于管理员手动控制活动的开启与关闭。
     async fn update_event_status(&self, event_id: Uuid, status: EventStatus) -> Result<()>;
+
+    /// [Admin] 删除活动 (软删除)
+    /// 
+    /// 将活动标记为 `Deleted` 状态，使其在所有正常查询中不可见。
+    async fn delete_event(&self, event_id: Uuid) -> Result<()>;
 }

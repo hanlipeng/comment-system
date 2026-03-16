@@ -1,0 +1,175 @@
+openapi: 3.0.3
+info:
+  title: Comment System Web API
+  description: API for the Comment System Web Interface (Vue Client).
+  version: 1.0.0
+servers:
+  - url: /api/v1
+    description: Default API path (configurable)
+paths:
+  /events/active:
+    get:
+      summary: Get Active Event
+      description: Retrieves the current active event. Returns null if no event is active.
+      operationId: getActiveEvent
+      responses:
+        '200':
+          description: Successful response. Body may be null if no active event.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Event'
+                  - type: 'null'
+        '500':
+          description: Internal Server Error
+  
+  /events/{id}:
+    get:
+      summary: Get Event Details
+      description: Retrieves details of a specific event by ID.
+      operationId: getEvent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the event
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Event details found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '404':
+          description: Event not found
+
+  /events/{id}/comments:
+    get:
+      summary: Get Recent Comments
+      description: Retrieves a list of recent comments for a specific event (default limit 20).
+      operationId: getEventComments
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the event
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of comments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Comment'
+        '404':
+          description: Event not found
+          
+    post:
+      summary: Submit Comment
+      description: Submits a new comment for the event.
+      operationId: createComment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the event
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentInput'
+      responses:
+        '201':
+          description: Comment created successfully
+        '400':
+          description: Bad Request (Invalid input or empty fields)
+        '403':
+          description: Forbidden (Event is closed)
+        '404':
+          description: Event not found
+        '409':
+          description: Conflict (Phone number already used for this event)
+
+components:
+  schemas:
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+          enum: [active, closed, deleted]
+        winner:
+          $ref: '#/components/schemas/Winner'
+          nullable: true
+      required:
+        - id
+        - title
+        - status
+
+    Winner:
+      type: object
+      description: Publicly visible winner information (masked)
+      properties:
+        nickname:
+          type: string
+        content:
+          type: string
+        phone_masked:
+          type: string
+          example: "138****1234"
+      required:
+        - nickname
+        - content
+        - phone_masked
+
+    Comment:
+      type: object
+      properties:
+        nickname:
+          type: string
+        content:
+          type: string
+        phone_masked:
+          type: string
+          example: "138****1234"
+        created_at:
+          type: integer
+          format: int64
+          description: Unix timestamp
+      required:
+        - nickname
+        - content
+        - phone_masked
+        - created_at
+
+    CommentInput:
+      type: object
+      properties:
+        nickname:
+          type: string
+        content:
+          type: string
+        phone:
+          type: string
+          description: Raw phone number (not masked)
+      required:
+        - nickname
+        - content
+        - phone

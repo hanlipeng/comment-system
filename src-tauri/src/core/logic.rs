@@ -3,6 +3,7 @@ use uuid::Uuid;
 use chrono::Utc;
 use std::sync::Arc;
 use async_trait::async_trait;
+use log::info;
 
 use crate::core::models::{Event, Comment, EventStatus, PublicWinner};
 use crate::core::EventServicePort;
@@ -31,7 +32,7 @@ impl EventServicePort for EventService {
             bail!("Title cannot be empty");
         }
         
-        let now = Utc::now().timestamp();
+        let now = Utc::now().timestamp_millis();
         // ID 暂时传空串，由 Storage 生成
         let entity = EventEntity {
             id: "".into(),
@@ -58,7 +59,11 @@ impl EventServicePort for EventService {
     async fn get_event(&self, event_id: Uuid) -> Result<Option<Event>> {
         let entity = self.event_storage.get_event(&event_id.to_string()).await?;
         if let Some(e) = entity {
-            return Ok(Some(map_event_from_entity(e)?));
+            let event = map_event_from_entity(e)?;
+            if event.status == EventStatus::Deleted {
+                return Ok(None);
+            }
+            return Ok(Some(event));
         }
         Ok(None)
     }
@@ -88,7 +93,13 @@ impl EventServicePort for EventService {
             bail!("Nickname and content cannot be empty");
         }
 
-        let now = Utc::now().timestamp();
+        // 检查手机号是否已存在
+        let existing = self.comment_storage.find_comment_by_event_and_phone(&event_id.to_string(), &phone).await?;
+        if existing.is_some() {
+            bail!("Phone number already used for this event");
+        }
+
+        let now = Utc::now().timestamp_millis();
         let entity = CommentEntity {
             id: "".into(),
             event_id: event_id.to_string(),
@@ -108,11 +119,22 @@ impl EventServicePort for EventService {
             event_id,
             nickname,
             content,
-            phone,
+            phone_masked: mask_phone(&phone),
             is_winner: false,
             created_at: now,
             updated_at: now,
         })
+    }
+
+    /// 获取最新留言
+    async fn get_recent_comments(&self, event_id: Uuid, limit: usize) -> Result<Vec<Comment>> {
+        let entities = self.comment_storage.list_recent_comments(&event_id.to_string(), limit as i64).await?;
+        
+        let mut comments = Vec::new();
+        for c in entities {
+            comments.push(map_comment_from_entity(c)?);
+        }
+        Ok(comments)
     }
 
     /// 随机抽奖
@@ -144,12 +166,12 @@ impl EventServicePort for EventService {
         // 更新状态：Comment 标记为 winner，Event 记录 winner_id
         let mut updated_comment = winner_entity.clone();
         updated_comment.is_winner = true;
-        updated_comment.updated_at = Utc::now().timestamp();
+        updated_comment.updated_at = Utc::now().timestamp_millis();
         self.comment_storage.update_comment(updated_comment.clone()).await?;
 
         let mut updated_event = event_entity;
         updated_event.winner_comment_id = Some(updated_comment.id.clone());
-        updated_event.updated_at = Utc::now().timestamp();
+        updated_event.updated_at = Utc::now().timestamp_millis();
         self.event_storage.update_event(updated_event).await?;
         
         Ok(map_comment_from_entity(updated_comment)?)
@@ -177,7 +199,10 @@ impl EventServicePort for EventService {
         let entities = self.event_storage.list_events().await?;
         let mut events = Vec::new();
         for e in entities {
-            events.push(map_event_from_entity(e)?);
+            let event = map_event_from_entity(e)?;
+            if event.status != EventStatus::Deleted {
+                events.push(event);
+            }
         }
         Ok(events)
     }
@@ -200,19 +225,26 @@ impl EventServicePort for EventService {
         let status_str = match status {
             EventStatus::Active => "active",
             EventStatus::Closed => "closed",
+            EventStatus::Deleted => "deleted",
         };
         
         event_entity.status = status_str.to_string();
-        event_entity.updated_at = Utc::now().timestamp();
+        event_entity.updated_at = Utc::now().timestamp_millis();
         
         self.event_storage.update_event(event_entity).await?;
         Ok(())
+    }
+
+    async fn delete_event(&self, event_id: Uuid) -> Result<()> {
+        info!("Attempting to delete event with ID: {}", event_id);
+        self.update_event_status(event_id, EventStatus::Deleted).await
     }
 }
 
 fn map_event_from_entity(entity: EventEntity) -> Result<Event> {
     let status = match entity.status.as_str() {
         "active" => EventStatus::Active,
+        "deleted" => EventStatus::Deleted,
         _ => EventStatus::Closed,
     };
     Ok(Event {
@@ -230,7 +262,7 @@ fn map_comment_from_entity(entity: CommentEntity) -> Result<Comment> {
         event_id: Uuid::parse_str(&entity.event_id)?,
         nickname: entity.nickname,
         content: entity.content,
-        phone: entity.phone,
+        phone_masked: mask_phone(&entity.phone),
         is_winner: entity.is_winner,
         created_at: entity.created_at,
         updated_at: entity.updated_at,

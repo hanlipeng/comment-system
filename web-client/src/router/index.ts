@@ -1,19 +1,29 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import CommentView from '../views/CommentView.vue';
 import ResultView from '../views/ResultView.vue';
+import DesktopResultView from '../views/DesktopResultView.vue';
 
 const routes = [
   {
-    path: '/comment',
+    path: '/events/:id',
     name: 'Comment',
     component: CommentView
   },
   {
-    path: '/result',
+    path: '/events/:id/result',
     name: 'Result',
     component: ResultView
   },
-  // 重定向根目录到留言页
+  // Backward compatibility
+  {
+    path: '/comment/:id?',
+    redirect: (to: any) => `/events/${to.params.id || '1'}`
+  },
+  {
+    path: '/desktop',
+    name: 'DesktopResult',
+    component: DesktopResultView
+  },
   {
     path: '/',
     redirect: '/comment'

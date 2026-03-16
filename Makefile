@@ -13,8 +13,12 @@ help:
 	@echo "  make install        - 安装所有 NPM 依赖 (Install all dependencies)"
 	@echo "  make clean          - 清理构建产物 (Clean build artifacts)"
 
+# 编译 Web Client 静态页面 (Build Web Client static pages)
+build-web:
+	cd web-client && npm run build
+
 # 启动开发环境 (Tauri)
-dev:
+dev: build-web
 	npm run tauri dev
 
 # 启动 Web 前端开发环境
@@ -22,11 +26,11 @@ web-dev:
 	cd web-client && npm run dev
 
 # 构建 Linux 版本
-build:
+build: build-web
 	npm run tauri build
 
 # 构建 Windows 版本 (.exe)
-build-windows:
+build-windows: build-web
 	npm run tauri build -- --target $(WIN_TARGET)
 
 # 安装依赖

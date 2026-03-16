@@ -6,6 +6,7 @@ use uuid::Uuid;
 pub enum EventStatus {
     Active,
     Closed,
+    Deleted,
 }
 
 impl Default for EventStatus {
@@ -31,7 +32,7 @@ pub struct Comment {
     pub event_id: Uuid,
     pub nickname: String,
     pub content: String,
-    pub phone: String,
+    pub phone_masked: String,
     pub is_winner: bool,
     pub created_at: i64,
     pub updated_at: i64,

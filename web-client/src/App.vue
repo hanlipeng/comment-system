@@ -15,7 +15,7 @@ const devReset = async () => { await api._dev_reset(); };
     <RouterView />
 
     <!-- 开发辅助工具 (右下角) -->
-    <div class="fixed bottom-4 right-4 flex flex-col gap-2 opacity-80 z-50">
+    <div v-if="showDevTools" class="fixed bottom-4 right-4 flex flex-col gap-2 opacity-80 z-50">
       <div class="bg-white/80 backdrop-blur p-2 rounded shadow text-xs mb-2">
         <p>Links:</p>
         <router-link to="/comment" class="text-blue-600 hover:underline block">/comment</router-link>

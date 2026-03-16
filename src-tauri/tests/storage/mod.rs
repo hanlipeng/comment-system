@@ -112,3 +112,75 @@ async fn test_missing_records() {
     let comment = comment_store.get_comment("non_existent").await.unwrap();
     assert!(comment.is_none());
 }
+
+#[tokio::test]
+async fn test_list_recent_comments() {
+    let (event_store, comment_store) = setup().await;
+    let now = Utc::now().timestamp();
+
+    let event = EventEntity {
+        id: "".into(),
+        title: "Recent Host".into(),
+        status: "active".into(),
+        winner_comment_id: None,
+        created_at: now,
+        updated_at: now,
+    };
+    let event_id = event_store.create_event(event).await.unwrap();
+
+    // Insert 3 comments with slightly different timestamps to ensure order
+    for i in 1..=3 {
+        let comment = CommentEntity {
+            id: "".into(),
+            event_id: event_id.clone(),
+            nickname: format!("User{}", i),
+            content: format!("Content{}", i),
+            phone: format!("100{}", i),
+            is_winner: false,
+            created_at: now + i, // distinct timestamps
+            updated_at: now + i,
+        };
+        comment_store.create_comment(comment).await.unwrap();
+    }
+
+    // Get recent 2. Should be User3 and User2 (descending order)
+    let recent = comment_store.list_recent_comments(&event_id, 2).await.unwrap();
+    assert_eq!(recent.len(), 2);
+    assert_eq!(recent[0].nickname, "User3");
+    assert_eq!(recent[1].nickname, "User2");
+}
+
+#[tokio::test]
+async fn test_find_comment_by_phone() {
+    let (event_store, comment_store) = setup().await;
+    let now = Utc::now().timestamp();
+
+    let event = EventEntity {
+        id: "".into(),
+        title: "Phone Host".into(),
+        status: "active".into(),
+        winner_comment_id: None,
+        created_at: now,
+        updated_at: now,
+    };
+    let event_id = event_store.create_event(event).await.unwrap();
+
+    let comment = CommentEntity {
+        id: "".into(),
+        event_id: event_id.clone(),
+        nickname: "User".into(),
+        content: "Content".into(),
+        phone: "13800001234".into(),
+        is_winner: false,
+        created_at: now,
+        updated_at: now,
+    };
+    comment_store.create_comment(comment).await.unwrap();
+
+    let found = comment_store.find_comment_by_event_and_phone(&event_id, "13800001234").await.unwrap();
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().phone, "13800001234");
+
+    let not_found = comment_store.find_comment_by_event_and_phone(&event_id, "13800009999").await.unwrap();
+    assert!(not_found.is_none());
+}
